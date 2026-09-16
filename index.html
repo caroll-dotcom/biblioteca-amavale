@@ -18,7 +18,7 @@ fetch('./app.html?v=4').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
   document.close();
   const authScript=document.createElement('script');
   authScript.type='module';
-  authScript.src='./auth.js?v=4';
+  authScript.src='./auth.js?v=5';
   document.body.appendChild(authScript);
 }).catch(()=>{document.body.innerHTML='<div class="loading"><div><b>Biblioteca Amavale</b><span>Não foi possível carregar o site. Atualize a página.</span></div></div>'});
 </script>
