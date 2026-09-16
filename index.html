@@ -16,6 +16,12 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
   document.open();
   document.write(html);
   document.close();
+
+  const responsive=document.createElement('link');
+  responsive.rel='stylesheet';
+  responsive.href='./responsive.css?v=1';
+  document.head.appendChild(responsive);
+
   const authScript=document.createElement('script');
   authScript.type='module';
   authScript.src='./auth.js?v=7';
@@ -27,6 +33,12 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
       const isbnScript=document.createElement('script');
       isbnScript.type='module';
       isbnScript.src='./isbn.js?v=1';
+      isbnScript.onload=()=>{
+        const responsiveLast=document.createElement('link');
+        responsiveLast.rel='stylesheet';
+        responsiveLast.href='./responsive.css?v=1';
+        document.head.appendChild(responsiveLast);
+      };
       document.body.appendChild(isbnScript);
     };
     document.body.appendChild(mobileFix);
