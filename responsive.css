@@ -102,8 +102,10 @@ main{
 .isbn-guide{left:7%!important;right:7%!important;top:37%!important;height:24%!important}
 .isbn-guide:after{font-size:11px!important;bottom:-32px!important;padding:0 6px}
 .isbn-found{grid-template-columns:minmax(62px,72px) minmax(0,1fr)!important}
+.isbn-found.no-cover{grid-template-columns:minmax(0,1fr)!important}
+.isbn-found.no-cover>div{grid-column:1/-1;min-width:0!important;width:100%}
 .isbn-cover{width:100%!important;height:auto!important;aspect-ratio:2/3;object-fit:cover}
-.isbn-code{max-width:100%;overflow-wrap:anywhere;white-space:normal}
+.isbn-code{max-width:100%;overflow:visible;word-break:normal!important;overflow-wrap:normal!important;white-space:nowrap}
 
 @media (max-width:380px){
   .top{gap:7px!important;padding-left:10px!important;padding-right:10px!important}
@@ -137,6 +139,7 @@ main{
   .admin-summary{grid-template-columns:1fr!important}
   .isbn-found{grid-template-columns:1fr!important}
   .isbn-cover{width:72px!important}
+  .isbn-code{white-space:normal}
 }
 
 @media (orientation:landscape) and (max-height:500px){
