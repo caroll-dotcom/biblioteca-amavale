@@ -18,12 +18,18 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
   document.close();
   const authScript=document.createElement('script');
   authScript.type='module';
-  authScript.src='./auth.js?v=6';
+  authScript.src='./auth.js?v=7';
   authScript.onload=()=>{
-    const isbnScript=document.createElement('script');
-    isbnScript.type='module';
-    isbnScript.src='./isbn.js?v=1';
-    document.body.appendChild(isbnScript);
+    const mobileFix=document.createElement('script');
+    mobileFix.type='module';
+    mobileFix.src='./auth-mobile-fix.js?v=1';
+    mobileFix.onload=()=>{
+      const isbnScript=document.createElement('script');
+      isbnScript.type='module';
+      isbnScript.src='./isbn.js?v=1';
+      document.body.appendChild(isbnScript);
+    };
+    document.body.appendChild(mobileFix);
   };
   document.body.appendChild(authScript);
 }).catch(()=>{document.body.innerHTML='<div class="loading"><div><b>Biblioteca Amavale</b><span>Não foi possível carregar o site. Atualize a página.</span></div></div>'});
