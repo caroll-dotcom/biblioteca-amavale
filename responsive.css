@@ -57,6 +57,7 @@ main{
   padding-bottom:calc(96px + env(safe-area-inset-bottom))!important;
 }
 .hero,.panel,.card,.vol-action,.item,.account-card,.admin-user{max-width:100%;min-width:0}
+.hero small{display:block!important;max-width:100%;overflow-wrap:anywhere;white-space:normal!important}
 .hero h1{font-size:clamp(26px,8vw,32px)!important;overflow-wrap:anywhere}
 .hero p,.mini,.notice,.item,.admin-user-meta{overflow-wrap:anywhere;word-break:normal}
 .grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
