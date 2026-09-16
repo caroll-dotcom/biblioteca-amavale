@@ -1,0 +1,158 @@
+/* Responsividade da Biblioteca Amavale */
+html{
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
+  overflow-x:hidden;
+  background:#ecebe6;
+}
+body{
+  width:100%;
+  max-width:100%;
+  min-height:100dvh;
+  overflow-x:hidden;
+  overscroll-behavior-x:none;
+}
+img,video,canvas,svg{max-width:100%;height:auto}
+button,input,select,textarea{max-width:100%}
+button{touch-action:manipulation}
+input,select,textarea{font-size:16px!important}
+
+.app{
+  width:100%!important;
+  max-width:520px!important;
+  min-height:100dvh!important;
+  overflow-x:hidden;
+}
+.top{
+  width:100%;
+  min-width:0;
+  padding-top:max(10px,env(safe-area-inset-top))!important;
+  padding-left:max(12px,env(safe-area-inset-left))!important;
+  padding-right:max(12px,env(safe-area-inset-right))!important;
+  gap:10px!important;
+}
+.logo{
+  width:68px!important;
+  height:68px!important;
+  min-width:68px!important;
+  object-fit:contain!important;
+  border-radius:14px!important;
+  padding:3px!important;
+  background:#fff!important;
+}
+.brand{min-width:0!important;overflow:hidden}
+.brand b,.brand span{overflow-wrap:anywhere}
+.vol-link{
+  min-height:44px;
+  max-width:34vw;
+  white-space:normal;
+  line-height:1.15;
+  flex:0 0 auto;
+}
+main{
+  width:100%;
+  min-width:0;
+  padding-left:max(14px,env(safe-area-inset-left))!important;
+  padding-right:max(14px,env(safe-area-inset-right))!important;
+  padding-bottom:calc(96px + env(safe-area-inset-bottom))!important;
+}
+.hero,.panel,.card,.vol-action,.item,.account-card,.admin-user{max-width:100%;min-width:0}
+.hero h1{font-size:clamp(26px,8vw,32px)!important;overflow-wrap:anywhere}
+.hero p,.mini,.notice,.item,.admin-user-meta{overflow-wrap:anywhere;word-break:normal}
+.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.card{min-width:0!important}
+.btn,.back,.vol-action,.vol-link,.nav button,.auth-tab{
+  min-height:44px;
+}
+.field,.search{min-height:46px}
+.book,.isbn-found{min-width:0}
+.book>*,.isbn-found>*{min-width:0}
+.location{grid-template-columns:minmax(62px,76px) minmax(0,1fr)!important}
+.item{align-items:flex-start;flex-wrap:wrap}
+.item>div{min-width:0;flex:1 1 180px}
+.tag{flex:0 0 auto}
+.qrbox{max-width:min(150px,70vw)!important;max-height:min(150px,70vw)!important}
+.label-preview{overflow-wrap:anywhere}
+
+.nav{
+  width:min(520px,100%)!important;
+  padding:7px max(4px,env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left))!important;
+}
+.nav button{min-width:0;padding:4px 2px;line-height:1.15}
+
+.auth-tabs{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.admin-summary{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.admin-kpi{min-width:0!important;padding:10px 5px!important}
+.admin-kpi b{font-size:clamp(18px,6vw,22px)!important}
+.admin-kpi span{overflow-wrap:anywhere}
+.admin-user-head{min-width:0;flex-wrap:wrap}
+.admin-user-head>div{min-width:0;flex:1 1 180px}
+.role-badge{max-width:100%;white-space:normal!important;text-align:center}
+
+.isbn-camera-wrap{width:100%!important;max-width:100%!important}
+.isbn-camera{
+  width:100%!important;
+  height:auto!important;
+  aspect-ratio:3/4;
+  max-height:min(62dvh,520px)!important;
+  object-fit:cover!important;
+}
+.isbn-guide{left:7%!important;right:7%!important;top:37%!important;height:24%!important}
+.isbn-guide:after{font-size:11px!important;bottom:-32px!important;padding:0 6px}
+.isbn-found{grid-template-columns:minmax(62px,72px) minmax(0,1fr)!important}
+.isbn-cover{width:100%!important;height:auto!important;aspect-ratio:2/3;object-fit:cover}
+.isbn-code{max-width:100%;overflow-wrap:anywhere;white-space:normal}
+
+@media (max-width:380px){
+  .top{gap:7px!important;padding-left:10px!important;padding-right:10px!important}
+  .logo{width:58px!important;height:58px!important;min-width:58px!important}
+  .brand b{font-size:14px!important}
+  .brand span{font-size:11px!important}
+  .vol-link{font-size:10px!important;padding:8px 9px!important;max-width:31vw}
+  main{padding-left:10px!important;padding-right:10px!important}
+  .hero{padding:18px!important;border-radius:22px!important}
+  .hero h1{font-size:27px!important}
+  .grid{gap:8px!important}
+  .card{padding:13px!important;min-height:112px!important;border-radius:17px!important}
+  .card b{font-size:14px!important}
+  .card span{font-size:11px!important}
+  .panel{padding:14px!important;border-radius:18px!important}
+  .title{font-size:22px!important}
+  .scanner{height:auto!important;min-height:220px;padding:14px!important}
+  .frame{width:min(150px,55vw)!important;height:min(150px,55vw)!important}
+  .admin-summary{gap:5px!important}
+  .admin-kpi span{font-size:9px!important}
+}
+
+@media (max-width:330px){
+  .logo{width:52px!important;height:52px!important;min-width:52px!important}
+  .brand b{font-size:13px!important}
+  .brand span{font-size:10px!important}
+  .vol-link{font-size:9px!important;padding:7px 8px!important}
+  .grid{grid-template-columns:1fr!important}
+  .card{min-height:96px!important}
+  .card .ico{margin-bottom:8px!important}
+  .admin-summary{grid-template-columns:1fr!important}
+  .isbn-found{grid-template-columns:1fr!important}
+  .isbn-cover{width:72px!important}
+}
+
+@media (orientation:landscape) and (max-height:500px){
+  .top{position:relative!important;padding-top:8px!important}
+  .logo{width:54px!important;height:54px!important;min-width:54px!important}
+  main{padding-bottom:78px!important}
+  .hero{padding:16px!important}
+  .hero h1{font-size:25px!important}
+  .isbn-camera{aspect-ratio:16/9!important;max-height:58dvh!important}
+  .isbn-guide{top:30%!important;height:30%!important}
+  .scanner{height:210px!important}
+  .frame{width:130px!important;height:130px!important}
+}
+
+@media (min-width:521px){
+  .app{box-shadow:0 0 30px rgba(0,0,0,.06)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
