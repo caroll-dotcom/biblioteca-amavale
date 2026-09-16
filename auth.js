@@ -16,6 +16,9 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
+  collection,
+  getDocs,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
@@ -46,6 +49,15 @@ style.textContent = `
 .google-btn{display:flex;align-items:center;justify-content:center;gap:8px}
 .account-card{background:#f7f8f2;border:1px solid #dfe7c8;border-radius:16px;padding:14px;margin-bottom:12px}
 .account-card b{display:block;margin-bottom:4px}.account-card small{color:var(--muted)}
+.admin-user{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px}
+.admin-user-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.admin-user-name{font-weight:800}.admin-user-meta{font-size:12px;color:var(--muted);line-height:1.45;margin-top:4px;word-break:break-word}
+.role-badge{font-size:10px;font-weight:800;padding:6px 9px;border-radius:999px;background:#eef2e4;white-space:nowrap}
+.admin-actions{display:grid;grid-template-columns:1fr;gap:7px;margin-top:10px}
+.admin-actions button{margin-top:0}
+.admin-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.admin-kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center}
+.admin-kpi b{display:block;font-size:22px}.admin-kpi span{font-size:10px;color:var(--muted)}
 `;
 document.head.appendChild(style);
 
@@ -60,6 +72,12 @@ function clearMessage(){
   const box = el('auth-message');
   if(box){ box.textContent=''; box.className='auth-status'; }
 }
+function adminMessage(text, type='ok'){
+  const box = el('admin-status');
+  if(!box) return;
+  box.textContent = text;
+  box.className = `auth-status show ${type}`;
+}
 function friendlyError(error){
   const code = error?.code || '';
   if(code.includes('email-already-in-use')) return 'Este e-mail já possui cadastro. Tente entrar.';
@@ -69,6 +87,7 @@ function friendlyError(error){
   if(code.includes('popup-closed-by-user')) return 'A janela do Google foi fechada antes de concluir o login.';
   if(code.includes('popup-blocked')) return 'O navegador bloqueou a janela de login. Tente novamente.';
   if(code.includes('unauthorized-domain')) return 'Este endereço ainda não está autorizado no Firebase Authentication.';
+  if(code.includes('permission-denied')) return 'Sua conta não tem permissão para realizar esta ação.';
   return 'Não foi possível concluir agora. Tente novamente.';
 }
 
@@ -145,11 +164,60 @@ function updateAuthUI(user, profile){
   }
   const role = profile?.role || 'member';
   const roleLabel = role === 'admin' ? 'Administrador' : role === 'volunteer' ? 'Voluntário' : 'Usuário da biblioteca';
+  const staffButton = role === 'volunteer' || role === 'admin'
+    ? '<button class="btn green" onclick="go(\'volunteer-home\')">Abrir Área do Voluntário</button>'
+    : '<div class="notice">Seu cadastro está ativo como usuário da biblioteca.</div>';
+  const adminButton = role === 'admin'
+    ? '<button class="btn primary" onclick="go(\'admin\')">Gerenciar usuários e voluntários</button>'
+    : '';
   account.innerHTML = `<div class="account-card"><b>${user.displayName || profile?.name || 'Usuário'}</b><small>${user.email || ''}<br>Perfil: ${roleLabel}</small></div>
-    ${role === 'volunteer' || role === 'admin' ? '<button class="btn green" onclick="go(\'volunteer-home\')">Abrir Área do Voluntário</button>' : '<div class="notice">Seu cadastro está ativo como usuário da biblioteca. O acesso de voluntário depende de autorização de um administrador.</div>'}
+    ${adminButton}
+    ${staffButton}
     <button class="btn secondary" onclick="logoutFirebase()">Sair da conta</button>`;
   forms.style.display='none';
 }
+
+async function renderAdminPanel(){
+  const section = el('admin');
+  if(!section) return;
+  section.innerHTML = `
+    <button class="back" onclick="go('volunteer-login')">← Minha conta</button>
+    <h2 class="title">Área Administrativa</h2>
+    <div class="panel"><b>Usuários e voluntários</b><p class="mini">Autorize ou revogue o acesso de voluntário sem precisar entrar no Firebase.</p></div>
+    <div id="admin-summary"></div>
+    <div id="admin-status" class="auth-status"></div>
+    <div id="admin-users"><div class="panel">Carregando usuários...</div></div>`;
+  try{
+    const snap = await getDocs(collection(db,'users'));
+    const users = snap.docs.map(d => ({uid:d.id, ...d.data()})).sort((a,b)=>(a.name||a.email||'').localeCompare(b.name||b.email||'', 'pt-BR'));
+    const members = users.filter(u=>u.role==='member').length;
+    const volunteers = users.filter(u=>u.role==='volunteer').length;
+    const admins = users.filter(u=>u.role==='admin').length;
+    el('admin-summary').innerHTML = `<div class="admin-summary"><div class="admin-kpi"><b>${members}</b><span>Usuários</span></div><div class="admin-kpi"><b>${volunteers}</b><span>Voluntários</span></div><div class="admin-kpi"><b>${admins}</b><span>Admins</span></div></div>`;
+    el('admin-users').innerHTML = users.length ? users.map(u=>{
+      const role = u.role || 'member';
+      const label = role === 'admin' ? 'Admin' : role === 'volunteer' ? 'Voluntário' : 'Usuário';
+      const isSelf = u.uid === auth.currentUser?.uid;
+      let actions = '';
+      if(role === 'member') actions = `<button class="btn green" onclick="changeUserRole('${u.uid}','volunteer')">Autorizar como voluntário</button>`;
+      if(role === 'volunteer') actions = `<button class="btn secondary" onclick="changeUserRole('${u.uid}','member')">Revogar acesso de voluntário</button>`;
+      if(role === 'admin') actions = `<div class="notice">Conta administrativa${isSelf ? ' (você)' : ''}.</div>`;
+      return `<div class="admin-user"><div class="admin-user-head"><div><div class="admin-user-name">${u.name || 'Sem nome'}</div><div class="admin-user-meta">${u.email || ''}${u.phone ? '<br>'+u.phone : ''}</div></div><span class="role-badge">${label}</span></div><div class="admin-actions">${actions}</div></div>`;
+    }).join('') : '<div class="panel">Nenhum usuário cadastrado.</div>';
+  }catch(error){
+    el('admin-users').innerHTML = `<div class="panel">${friendlyError(error)}</div>`;
+  }
+}
+
+window.changeUserRole = async function(uid,newRole){
+  if(currentProfile?.role !== 'admin') return;
+  if(uid === auth.currentUser?.uid){ adminMessage('Sua própria conta administrativa não pode ser alterada por esta tela.','error'); return; }
+  try{
+    await updateDoc(doc(db,'users',uid),{role:newRole});
+    adminMessage(newRole === 'volunteer' ? 'Voluntário autorizado com sucesso.' : 'Acesso de voluntário revogado.','ok');
+    await renderAdminPanel();
+  }catch(error){ adminMessage(friendlyError(error),'error'); }
+};
 
 window.showAuthMode = function(mode){
   clearMessage();
@@ -213,8 +281,9 @@ window.logoutFirebase = async function(){
 };
 
 window.go = function(id){
-  if(['volunteer-home','isbn-scan','manual-book','today-books','labels','admin'].includes(id)){
-    const role = currentProfile?.role;
+  const role = currentProfile?.role;
+  const volunteerScreens = ['volunteer-home','isbn-scan','manual-book','today-books','labels'];
+  if(volunteerScreens.includes(id)){
     if(!auth.currentUser){
       originalGo('volunteer-login');
       setTimeout(()=>message('Entre na sua conta para acessar esta área.'),0);
@@ -224,6 +293,15 @@ window.go = function(id){
       originalGo('volunteer-login');
       return;
     }
+  }
+  if(id === 'admin'){
+    if(!auth.currentUser || role !== 'admin'){
+      originalGo('volunteer-login');
+      return;
+    }
+    originalGo('admin');
+    renderAdminPanel();
+    return;
   }
   originalGo(id);
 };
