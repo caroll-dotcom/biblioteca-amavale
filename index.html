@@ -19,7 +19,7 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
 
   const responsive=document.createElement('link');
   responsive.rel='stylesheet';
-  responsive.href='./responsive.css?v=2';
+  responsive.href='./responsive.css?v=3';
   document.head.appendChild(responsive);
 
   const authScript=document.createElement('script');
@@ -31,7 +31,7 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
     mobileFix.src='./auth-mobile-fix.js?v=1';
     mobileFix.onload=()=>{
       const lookupFix=document.createElement('script');
-      lookupFix.src='./isbn-lookup-fix.js?v=1';
+      lookupFix.src='./isbn-lookup-fix.js?v=2';
       lookupFix.onload=()=>{
         const isbnScript=document.createElement('script');
         isbnScript.type='module';
@@ -39,7 +39,7 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
         isbnScript.onload=()=>{
           const responsiveLast=document.createElement('link');
           responsiveLast.rel='stylesheet';
-          responsiveLast.href='./responsive.css?v=2';
+          responsiveLast.href='./responsive.css?v=3';
           document.head.appendChild(responsiveLast);
         };
         document.body.appendChild(isbnScript);
