@@ -1,0 +1,124 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function role() {
+      return signedIn() && exists(userPath(request.auth.uid))
+        ? get(userPath(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isAdmin() {
+      return role() == 'admin';
+    }
+
+    function isStaff() {
+      return role() == 'admin' || role() == 'volunteer';
+    }
+
+    function memberCheckoutCopy() {
+      return signedIn()
+        && resource.data.status == 'available'
+        && request.resource.data.status == 'borrowed'
+        && request.resource.data.borrowedBy == request.auth.uid
+        && request.resource.data.activeLoanId is string
+        && request.resource.data.dueAt is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'borrowedBy', 'activeLoanId', 'dueAt', 'lastLoanAt'
+        ])
+        && getAfter(/databases/$(database)/documents/loans/$(request.resource.data.activeLoanId)).data.memberId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/loans/$(request.resource.data.activeLoanId)).data.copyCode == resource.data.code
+        && getAfter(/databases/$(database)/documents/loans/$(request.resource.data.activeLoanId)).data.status == 'borrowed';
+    }
+
+    function memberReturnCopy() {
+      return signedIn()
+        && resource.data.status == 'borrowed'
+        && resource.data.borrowedBy == request.auth.uid
+        && resource.data.activeLoanId is string
+        && request.resource.data.status == 'available'
+        && request.resource.data.borrowedBy == null
+        && request.resource.data.activeLoanId == null
+        && request.resource.data.dueAt == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'borrowedBy', 'activeLoanId', 'dueAt', 'lastReturnAt'
+        ])
+        && getAfter(/databases/$(database)/documents/loans/$(resource.data.activeLoanId)).data.memberId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/loans/$(resource.data.activeLoanId)).data.copyCode == resource.data.code
+        && getAfter(/databases/$(database)/documents/loans/$(resource.data.activeLoanId)).data.status == 'returned';
+    }
+
+    match /users/{uid} {
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == 'member';
+
+      allow read: if signedIn()
+        && (request.auth.uid == uid || isAdmin());
+
+      allow update: if isAdmin()
+        || (signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone']));
+
+      allow delete: if isAdmin();
+    }
+
+    match /books/{isbn} {
+      allow read: if signedIn();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /copies/{copyCode} {
+      allow read: if signedIn();
+      allow create, delete: if isStaff();
+      allow update: if isStaff() || memberCheckoutCopy() || memberReturnCopy();
+    }
+
+    match /loans/{loanId} {
+      allow read: if signedIn()
+        && (resource.data.memberId == request.auth.uid || isStaff());
+
+      allow create: if signedIn()
+        && request.resource.data.memberId == request.auth.uid
+        && request.resource.data.copyCode is string
+        && request.resource.data.isbn is string
+        && request.resource.data.title is string
+        && request.resource.data.author is string
+        && request.resource.data.shelf is string
+        && request.resource.data.status == 'borrowed'
+        && request.resource.data.borrowedAt == request.time
+        && request.resource.data.dueAt is timestamp
+        && request.resource.data.dueAt > request.time
+        && request.resource.data.dueAt <= request.time + duration.value(30, 'd')
+        && request.resource.data.returnedAt == null
+        && getAfter(/databases/$(database)/documents/copies/$(request.resource.data.copyCode)).data.status == 'borrowed'
+        && getAfter(/databases/$(database)/documents/copies/$(request.resource.data.copyCode)).data.borrowedBy == request.auth.uid
+        && getAfter(/databases/$(database)/documents/copies/$(request.resource.data.copyCode)).data.activeLoanId == loanId
+        && getAfter(/databases/$(database)/documents/copies/$(request.resource.data.copyCode)).data.title == request.resource.data.title
+        && getAfter(/databases/$(database)/documents/copies/$(request.resource.data.copyCode)).data.author == request.resource.data.author;
+
+      allow update: if signedIn()
+        && resource.data.memberId == request.auth.uid
+        && resource.data.status == 'borrowed'
+        && request.resource.data.memberId == resource.data.memberId
+        && request.resource.data.copyCode == resource.data.copyCode
+        && request.resource.data.status == 'returned'
+        && request.resource.data.returnedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'returnedAt'])
+        && getAfter(/databases/$(database)/documents/copies/$(resource.data.copyCode)).data.status == 'available'
+        && getAfter(/databases/$(database)/documents/copies/$(resource.data.copyCode)).data.borrowedBy == null
+        && getAfter(/databases/$(database)/documents/copies/$(resource.data.copyCode)).data.activeLoanId == null;
+
+      allow delete: if isStaff();
+    }
+  }
+}
