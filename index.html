@@ -40,10 +40,16 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
           const qrLabel=document.createElement('script');
           qrLabel.src='./qr-label.js?v=1';
           qrLabel.onload=()=>{
-            const responsiveLast=document.createElement('link');
-            responsiveLast.rel='stylesheet';
-            responsiveLast.href='./responsive.css?v=3';
-            document.head.appendChild(responsiveLast);
+            const memberLoans=document.createElement('script');
+            memberLoans.type='module';
+            memberLoans.src='./member-loans.js?v=1';
+            memberLoans.onload=()=>{
+              const responsiveLast=document.createElement('link');
+              responsiveLast.rel='stylesheet';
+              responsiveLast.href='./responsive.css?v=3';
+              document.head.appendChild(responsiveLast);
+            };
+            document.body.appendChild(memberLoans);
           };
           document.body.appendChild(qrLabel);
         };
