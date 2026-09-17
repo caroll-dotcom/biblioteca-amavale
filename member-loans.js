@@ -74,6 +74,8 @@ function memberError(error){
   if(String(code).includes('NOT_BORROWED')) return 'Este exemplar não está marcado como emprestado.';
   if(String(code).includes('NOT_YOURS')) return 'Este exemplar está emprestado para outro usuário.';
   if(String(code).includes('LOAN_NOT_FOUND')) return 'Não encontramos o empréstimo ativo deste exemplar.';
+  if(String(code).includes('OVERDUE_BLOCK')) return 'Você tem um empréstimo em atraso. Novos empréstimos ficam bloqueados até a devolução.';
+  if(String(code).includes('LIMIT_REACHED')) return 'Você já está com o limite de 2 livros emprestados. Devolva um deles antes de retirar outro.';
   return 'Não foi possível concluir agora. Tente novamente.';
 }
 function setMemberStatus(mode,text,type='info'){
@@ -81,6 +83,25 @@ function setMemberStatus(mode,text,type='info'){
   if(!box) return;
   box.className=`member-status ${type}`;
   box.textContent=text;
+}
+
+function dueDateOf(loan){
+  return loan?.dueAt?.toDate?.() || null;
+}
+function isLoanOverdue(loan){
+  const due=dueDateOf(loan);
+  if(!due) return false;
+  const endOfDueDay=new Date(due);
+  endOfDueDay.setHours(23,59,59,999);
+  return Date.now()>endOfDueDay.getTime();
+}
+async function getMemberBorrowingState(){
+  if(!auth.currentUser) return {active:[],overdue:[]};
+  const snap=await getDocs(query(collection(db,'loans'),where('memberId','==',auth.currentUser.uid)));
+  const active=snap.docs
+    .map(d=>({id:d.id,...d.data()}))
+    .filter(x=>x.status==='borrowed' && !x.returnedAt);
+  return {active,overdue:active.filter(isLoanOverdue)};
 }
 
 function scannerMarkup(mode){
@@ -241,21 +262,31 @@ async function handleCopy(mode,code){
   try{
     const copy=await getCopyWithBook(code);
     selectedCopy=copy;
-    if(mode==='borrow') renderBorrowCopy(copy);
-    else renderReturnCopy(copy);
+    if(mode==='borrow'){
+      const borrowingState=await getMemberBorrowingState();
+      renderBorrowCopy(copy,borrowingState);
+    }else renderReturnCopy(copy);
   }catch(error){
     if(result) result.innerHTML='';
     setMemberStatus(mode,memberError(error),'error');
   }
 }
 
-function renderBorrowCopy(copy){
+function renderBorrowCopy(copy,borrowingState={active:[],overdue:[]}){
   const result=el('borrow-member-result');
   if(!result) return;
   const available=(copy.status || 'available')==='available';
   const mine=copy.status==='borrowed' && copy.borrowedBy===auth.currentUser?.uid;
   let action='';
-  if(available){
+  if(available && borrowingState.overdue.length){
+    const first=borrowingState.overdue.slice().sort((a,b)=>(dueDateOf(a)?.getTime()||0)-(dueDateOf(b)?.getTime()||0))[0];
+    const due=dueDateOf(first);
+    action=`<div class="member-status error"><b>Novos empréstimos bloqueados.</b><br>Você possui ${borrowingState.overdue.length} ${borrowingState.overdue.length===1?'livro em atraso':'livros em atraso'}${due?' desde '+fmtDate(due):''}. Faça a devolução para liberar novamente sua conta.</div>`;
+    setMemberStatus('borrow','Sua conta está temporariamente bloqueada para novos empréstimos por atraso.','error');
+  }else if(available && borrowingState.active.length>=2){
+    action='<div class="member-status error"><b>Limite de empréstimos atingido.</b><br>Cada membro pode ficar com até 2 livros ao mesmo tempo. Devolva um deles antes de retirar outro.</div>';
+    setMemberStatus('borrow','Você já está com 2 livros emprestados.','error');
+  }else if(available){
     const due=new Date(); due.setDate(due.getDate()+30);
     action=`<div class="notice">Prazo de empréstimo: <b>30 dias</b>. Devolução prevista em <b>${fmtDate(due)}</b>.</div><button class="btn green" onclick="confirmMemberBorrow('${esc(copy.code||copy.id)}')">Confirmar empréstimo</button>`;
     setMemberStatus('borrow','Exemplar identificado. Confira o livro antes de confirmar.','ok');
@@ -294,6 +325,9 @@ window.confirmMemberBorrow=async function(code){
   if(button){ button.disabled=true; button.textContent='Registrando empréstimo…'; }
   try{
     const user=auth.currentUser;
+    const borrowingState=await getMemberBorrowingState();
+    if(borrowingState.overdue.length) throw new Error('OVERDUE_BLOCK');
+    if(borrowingState.active.length>=2) throw new Error('LIMIT_REACHED');
     const copyRef=doc(db,'copies',code);
     const loanRef=doc(collection(db,'loans'));
     const dueDate=new Date(); dueDate.setDate(dueDate.getDate()+30);
@@ -390,9 +424,14 @@ async function renderMemberLoans(){
       const ad=a.dueAt?.toMillis?.() || 0, bd=b.dueAt?.toMillis?.() || 0; return ad-bd;
     });
     if(!loans.length){ list.innerHTML='<div class="panel">Você não tem livros emprestados no momento.</div>'; return; }
-    list.innerHTML=loans.map(l=>{
-      const due=l.dueAt?.toDate?.();
-      return `<div class="panel"><b>${esc(l.title||'Livro')}</b><p class="mini">${esc(l.author||'')}<br>Exemplar <b>${esc(l.copyCode||'')}</b>${l.shelf ? ' · Prateleira '+esc(l.shelf) : ''}</p>${due ? `<div class="notice">Devolver até <b>${fmtDate(due)}</b>.</div>` : ''}<button class="btn secondary" onclick="go('return'); setTimeout(()=>memberLoadCopyForMode('return','${esc(l.copyCode||'')}'),0)">Devolver este livro</button></div>`;
+    const overdue=loans.filter(isLoanOverdue);
+    const summary=`<div class="panel"><b>${loans.length} de 2 livros emprestados</b><p class="mini">Prazo padrão: 30 dias. A renovação poderá acrescentar mais 30 dias quando não houver fila de espera.</p></div>`;
+    const blocked=overdue.length ? `<div class="member-status error" style="margin-bottom:12px"><b>Conta bloqueada para novos empréstimos.</b><br>${overdue.length===1?'Há 1 livro em atraso.':'Há '+overdue.length+' livros em atraso.'} O bloqueio é retirado automaticamente após a devolução.</div>` : '';
+    list.innerHTML=blocked+summary+loans.map(l=>{
+      const due=dueDateOf(l);
+      const late=isLoanOverdue(l);
+      const dueBox=due ? (late ? `<div class="member-status error"><b>Em atraso.</b> O prazo terminou em ${fmtDate(due)}.</div>` : `<div class="notice">Devolver até <b>${fmtDate(due)}</b>.</div>`) : '';
+      return `<div class="panel"><b>${esc(l.title||'Livro')}</b><p class="mini">${esc(l.author||'')}<br>Exemplar <b>${esc(l.copyCode||'')}</b>${l.shelf ? ' · Prateleira '+esc(l.shelf) : ''}</p>${dueBox}<button class="btn secondary" onclick="go('return'); setTimeout(()=>memberLoadCopyForMode('return','${esc(l.copyCode||'')}'),0)">Devolver este livro</button></div>`;
     }).join('');
   }catch(error){
     list.innerHTML=`<div class="member-status error">${esc(memberError(error))}</div>`;
@@ -426,8 +465,9 @@ async function openDirectCopy(code){
       window.go('return');
       setTimeout(()=>{ selectedCopy=copy; renderReturnCopy(copy); },0);
     }else{
+      const borrowingState=await getMemberBorrowingState();
       window.go('borrow');
-      setTimeout(()=>{ selectedCopy=copy; renderBorrowCopy(copy); },0);
+      setTimeout(()=>{ selectedCopy=copy; renderBorrowCopy(copy,borrowingState); },0);
     }
   }catch(error){
     window.go('borrow');
