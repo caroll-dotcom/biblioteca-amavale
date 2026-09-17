@@ -256,8 +256,8 @@ function renderBorrowCopy(copy){
   const mine=copy.status==='borrowed' && copy.borrowedBy===auth.currentUser?.uid;
   let action='';
   if(available){
-    const due=new Date(); due.setDate(due.getDate()+14);
-    action=`<div class="notice">Prazo de empréstimo: <b>14 dias</b>. Devolução prevista em <b>${fmtDate(due)}</b>.</div><button class="btn green" onclick="confirmMemberBorrow('${esc(copy.code||copy.id)}')">Confirmar empréstimo</button>`;
+    const due=new Date(); due.setDate(due.getDate()+30);
+    action=`<div class="notice">Prazo de empréstimo: <b>30 dias</b>. Devolução prevista em <b>${fmtDate(due)}</b>.</div><button class="btn green" onclick="confirmMemberBorrow('${esc(copy.code||copy.id)}')">Confirmar empréstimo</button>`;
     setMemberStatus('borrow','Exemplar identificado. Confira o livro antes de confirmar.','ok');
   }else if(mine){
     action=`<div class="notice">Este exemplar já está emprestado para você.</div><button class="btn secondary" onclick="go('return'); setTimeout(()=>memberLoadCopyForMode('return','${esc(copy.code||copy.id)}'),0)">Ir para devolução</button>`;
@@ -296,7 +296,7 @@ window.confirmMemberBorrow=async function(code){
     const user=auth.currentUser;
     const copyRef=doc(db,'copies',code);
     const loanRef=doc(collection(db,'loans'));
-    const dueDate=new Date(); dueDate.setDate(dueDate.getDate()+14);
+    const dueDate=new Date(); dueDate.setDate(dueDate.getDate()+30);
     const dueAt=Timestamp.fromDate(dueDate);
     let savedCopy=null;
     await runTransaction(db,async transaction=>{
