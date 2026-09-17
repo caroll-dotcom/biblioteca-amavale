@@ -42,7 +42,7 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
           qrLabel.onload=()=>{
             const memberLoans=document.createElement('script');
             memberLoans.type='module';
-            memberLoans.src='./member-loans.js?v=2';
+            memberLoans.src='./member-loans.js?v=3';
             memberLoans.onload=()=>{
               const responsiveLast=document.createElement('link');
               responsiveLast.rel='stylesheet';
