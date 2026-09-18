@@ -44,10 +44,22 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
             memberLoans.type='module';
             memberLoans.src='./member-loans.js?v=3';
             memberLoans.onload=()=>{
-              const responsiveLast=document.createElement('link');
-              responsiveLast.rel='stylesheet';
-              responsiveLast.href='./responsive.css?v=3';
-              document.head.appendChild(responsiveLast);
+              const waitlistCatalog=document.createElement('script');
+              waitlistCatalog.type='module';
+              waitlistCatalog.src='./waitlist-catalog.js?v=1';
+              waitlistCatalog.onload=()=>{
+                const renewalReservation=document.createElement('script');
+                renewalReservation.type='module';
+                renewalReservation.src='./renewal-reservation.js?v=1';
+                renewalReservation.onload=()=>{
+                  const responsiveLast=document.createElement('link');
+                  responsiveLast.rel='stylesheet';
+                  responsiveLast.href='./responsive.css?v=3';
+                  document.head.appendChild(responsiveLast);
+                };
+                document.body.appendChild(renewalReservation);
+              };
+              document.body.appendChild(waitlistCatalog);
             };
             document.body.appendChild(memberLoans);
           };
