@@ -154,7 +154,7 @@ function renderManualBook(){
         <option value="">Selecione</option>
         <option>Literatura brasileira</option><option>Literatura estrangeira</option><option>Contos e crônicas</option><option>Poesia</option>
         <option>História do Brasil</option><option>História geral</option><option>Sociedade</option>
-        <option>Natureza e meio ambiente</option><option>Arte</option><option>Infantil</option><option>Juvenil</option><option>Outros</option>
+        <option>Natureza e meio ambiente</option><option>Arte</option><option>Tecnologia</option><option>Infantil</option><option>Juvenil</option><option>Outros</option>
       </select>
       <span class="label">Prateleira</span>
       <select class="field" id="manual-shelf">
