@@ -54,7 +54,7 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
                 renewalReservation.onload=()=>{
                   const staffInventory=document.createElement('script');
                   staffInventory.type='module';
-                  staffInventory.src='./staff-inventory.js?v=1';
+                  staffInventory.src='./staff-inventory.js?v=2';
                   staffInventory.onload=()=>{
                     const responsiveLast=document.createElement('link');
                     responsiveLast.rel='stylesheet';
