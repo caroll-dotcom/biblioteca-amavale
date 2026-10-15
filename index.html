@@ -24,7 +24,7 @@ fetch('./app.html?v=5').then(r=>{if(!r.ok)throw new Error('Falha ao carregar');r
 
   const authScript=document.createElement('script');
   authScript.type='module';
-  authScript.src='./auth.js?v=8';
+  authScript.src='./auth.js?v=9';
   authScript.onload=()=>{
     const mobileFix=document.createElement('script');
     mobileFix.type='module';
