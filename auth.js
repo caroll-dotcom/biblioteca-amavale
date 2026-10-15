@@ -9,7 +9,10 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
-  updateProfile
+  updateProfile,
+  setPersistence,
+  indexedDBLocalPersistence,
+  browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
   getFirestore,
@@ -35,6 +38,28 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+const ROLE_CACHE_KEY = 'amavale_auth_profile_v1';
+async function ensureAuthPersistence(){
+  try{
+    await setPersistence(auth,indexedDBLocalPersistence);
+  }catch(e){
+    try{ await setPersistence(auth,browserLocalPersistence); }catch(ignore){}
+  }
+}
+const persistenceReady = ensureAuthPersistence();
+
+function cacheProfile(profile){
+  try{
+    if(profile?.uid) localStorage.setItem(ROLE_CACHE_KEY,JSON.stringify({uid:profile.uid,role:profile.role||'member',name:profile.name||'',savedAt:Date.now()}));
+  }catch(e){}
+}
+function cachedProfileFor(uid){
+  try{
+    const data=JSON.parse(localStorage.getItem(ROLE_CACHE_KEY)||'null');
+    return data?.uid===uid ? data : null;
+  }catch(e){ return null; }
+}
 
 let currentProfile = null;
 const originalGo = window.go;
@@ -105,7 +130,9 @@ async function ensureUserProfile(user, extra={}){
     });
   }
   const fresh = await getDoc(ref);
-  return fresh.exists() ? {uid:user.uid, ...fresh.data()} : {uid:user.uid, role:'member'};
+  const profile = fresh.exists() ? {uid:user.uid, ...fresh.data()} : {uid:user.uid, role:'member'};
+  cacheProfile(profile);
+  return profile;
 }
 
 function renderAuthScreen(){
@@ -240,6 +267,7 @@ window.registerMember = async function(){
   if(!name || !email || !phone || !password){ message('Preencha nome, e-mail, telefone e senha.'); return; }
   if(password !== confirm){ message('As duas senhas precisam ser iguais.'); return; }
   try{
+    await persistenceReady;
     const credential = await createUserWithEmailAndPassword(auth,email,password);
     await updateProfile(credential.user,{displayName:name});
     currentProfile = await ensureUserProfile(credential.user,{name,phone});
@@ -254,6 +282,7 @@ window.loginWithEmail = async function(){
   const password = el('login-password')?.value || '';
   if(!email || !password){ message('Digite seu e-mail e sua senha.'); return; }
   try{
+    await persistenceReady;
     const credential = await signInWithEmailAndPassword(auth,email,password);
     currentProfile = await ensureUserProfile(credential.user);
     updateAuthUI(credential.user,currentProfile);
@@ -263,6 +292,7 @@ window.loginWithEmail = async function(){
 window.loginWithGoogle = async function(){
   clearMessage();
   try{
+    await persistenceReady;
     const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if(mobile){
       await signInWithRedirect(auth,googleProvider);
@@ -277,6 +307,7 @@ window.loginWithGoogle = async function(){
 window.logoutFirebase = async function(){
   await signOut(auth);
   currentProfile = null;
+  try{ localStorage.removeItem(ROLE_CACHE_KEY); }catch(e){}
   originalGo('home');
 };
 
@@ -317,8 +348,12 @@ try{
 
 onAuthStateChanged(auth, async user => {
   if(user){
+    const cached=cachedProfileFor(user.uid);
+    if(cached) currentProfile={uid:user.uid,role:cached.role||'member',name:cached.name||user.displayName||''};
     try{ currentProfile = await ensureUserProfile(user); }
-    catch(e){ currentProfile = {uid:user.uid, role:'member'}; }
+    catch(e){
+      if(!currentProfile) currentProfile = {uid:user.uid, role:'member'};
+    }
   }else{
     currentProfile = null;
   }
