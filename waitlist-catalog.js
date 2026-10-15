@@ -1,6 +1,6 @@
 
 import { getApps, getApp, initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
-import { getAuth } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const firebaseConfig={
@@ -16,6 +16,15 @@ const auth=getAuth(app);
 const db=getFirestore(app);
 const previousGo=window.go;
 const previousRenderCatalog=window.renderCatalog;
+
+function normalizeSearch(value=''){
+  return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+function renderCatalogLogin(){
+  const list=document.getElementById('catalog-list');
+  if(!list) return;
+  list.innerHTML='<div class="panel"><b>Catálogo da Biblioteca Amavale</b><p class="mini">Entre na sua conta para consultar o acervo real, pesquisar por título, autor ou assunto e ver a disponibilidade dos exemplares.</p><button class="btn primary" onclick="go(\'volunteer-login\')">Entrar para consultar o acervo</button></div>';
+}
 
 function esc(v){return String(v||'').replace(/[&<>'"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c];});}
 function keyFor(o){return String((o&&((o.queueKey)||(o.isbn)||(o.copyCode)||(o.code)))||'').trim();}
@@ -88,7 +97,7 @@ window.cancelWaitlist=async function(key){
 
 async function renderRealCatalog(){
   if(!auth.currentUser){
-    if(typeof previousRenderCatalog==='function')previousRenderCatalog();
+    renderCatalogLogin();
     return;
   }
   const list=document.getElementById('catalog-list');
@@ -106,11 +115,11 @@ async function renderRealCatalog(){
       if(!groups.has(key))groups.set(key,{key:key,title:c.title||'Livro',author:c.author||'',category:c.category||'',shelf:c.shelf||'',copies:[]});
       groups.get(key).copies.push(c);
     });
-    const term=((input&&input.value)||'').trim().toLowerCase();
+    const term=normalizeSearch((input&&input.value)||'');
     const rows=Array.from(groups.values()).filter(function(g){
-      return [g.title,g.author,g.category,g.shelf].join(' ').toLowerCase().includes(term);
-    });
-    if(!rows.length){list.innerHTML='<div class="panel">Nenhum livro encontrado.</div>';return;}
+      return normalizeSearch([g.title,g.author,g.category,g.shelf,g.key].join(' ')).includes(term);
+    }).sort(function(a,b){ return String(a.title||'').localeCompare(String(b.title||''),'pt-BR'); });
+    if(!rows.length){list.innerHTML='<div class="panel">Nenhum livro encontrado para esta busca.</div>';return;}
     const html=[];
     for(const g of rows){
       const available=g.copies.filter(function(c){return (c.status||'available')==='available';}).length;
@@ -132,7 +141,7 @@ async function renderRealCatalog(){
         tag='<span class="tag">Emprestado</span>';
         action='<button class="btn secondary" onclick="joinWaitlist(\''+esc(g.key)+'\')">Entrar na fila de espera</button>';
       }
-      html.push('<div class="panel"><div class="item" style="border:0;padding:0"><div><b>'+esc(g.title)+'</b><small>'+esc(g.author)+'</small><small>'+(g.shelf?'📍 '+esc(g.shelf):'')+(g.category?' · '+esc(g.category):'')+'</small></div>'+tag+'</div>'+action+'</div>');
+      html.push('<div class="panel"><div class="item" style="border:0;padding:0"><div><b>'+esc(g.title)+'</b><small>'+esc(g.author)+'</small>'+(g.category?'<small><b>Assunto:</b> '+esc(g.category)+'</small>':'')+'<small>'+(g.shelf?'📍 Prateleira '+esc(g.shelf):'')+'</small></div>'+tag+'</div>'+action+'</div>');
     }
     list.innerHTML=html.join('');
   }catch(e){
@@ -148,4 +157,12 @@ window.go=function(id){
 };
 
 const input=document.getElementById('search');
-if(input)input.oninput=function(){renderRealCatalog();};
+if(input){
+  input.placeholder='Título, autor ou assunto...';
+  input.oninput=function(){renderRealCatalog();};
+}
+
+onAuthStateChanged(auth,function(){
+  const active=document.querySelector('.screen.active')?.id;
+  if(active==='catalog') setTimeout(renderRealCatalog,30);
+});
