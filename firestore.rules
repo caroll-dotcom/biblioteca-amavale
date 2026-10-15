@@ -15,12 +15,18 @@ service cloud.firestore {
         : null;
     }
 
+    function isDesignatedAdmin() {
+      return signedIn()
+        && request.auth.token.email == 'rafaelmayer.art@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
     function isAdmin() {
-      return role() == 'admin';
+      return role() == 'admin' || isDesignatedAdmin();
     }
 
     function isStaff() {
-      return role() == 'admin' || role() == 'volunteer';
+      return isAdmin() || role() == 'volunteer';
     }
 
     function memberCheckoutCopy() {
