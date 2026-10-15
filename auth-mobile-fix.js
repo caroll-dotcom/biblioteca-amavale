@@ -1,5 +1,5 @@
 import { getApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, setPersistence, indexedDBLocalPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 
 const auth = getAuth(getApp());
 const provider = new GoogleAuthProvider();
@@ -15,6 +15,8 @@ window.loginWithGoogle = async function(){
   const box = document.getElementById('auth-message');
   if(box){ box.textContent=''; box.className='auth-status'; }
   try{
+    try{ await setPersistence(auth,indexedDBLocalPersistence); }
+    catch(e){ try{ await setPersistence(auth,browserLocalPersistence); }catch(ignore){} }
     await signInWithPopup(auth, provider);
   }catch(error){
     const code = error?.code || '';
