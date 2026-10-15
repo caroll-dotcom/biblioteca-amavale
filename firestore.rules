@@ -152,12 +152,14 @@ service cloud.firestore {
 
     match /books/{isbn} {
       allow read: if signedIn();
-      allow create, update, delete: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
     }
 
     match /copies/{copyCode} {
       allow read: if signedIn();
-      allow create, delete: if isStaff();
+      allow create: if isStaff();
+      allow delete: if isAdmin();
       allow update: if isStaff()
         || memberCheckoutCopy()
         || memberReturnCopy()
