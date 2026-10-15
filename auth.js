@@ -40,6 +40,13 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
 const ROLE_CACHE_KEY = 'amavale_auth_profile_v1';
+const DESIGNATED_ADMINS = new Map([
+  ['rafaelmayer.art@gmail.com','Rafael Mayer']
+]);
+function designatedAdminName(user){
+  if(!user?.emailVerified) return null;
+  return DESIGNATED_ADMINS.get(String(user.email||'').toLowerCase()) || null;
+}
 async function ensureAuthPersistence(){
   try{
     await setPersistence(auth,indexedDBLocalPersistence);
@@ -118,16 +125,29 @@ function friendlyError(error){
 
 async function ensureUserProfile(user, extra={}){
   const ref = doc(db,'users',user.uid);
-  const snap = await getDoc(ref);
+  let snap = await getDoc(ref);
+  const adminName = designatedAdminName(user);
   if(!snap.exists()){
     await setDoc(ref,{
-      name: extra.name || user.displayName || '',
+      name: extra.name || adminName || user.displayName || '',
       email: user.email || '',
       phone: extra.phone || '',
       role: 'member',
       provider: user.providerData?.[0]?.providerId || 'password',
       createdAt: serverTimestamp()
     });
+    snap = await getDoc(ref);
+  }
+  if(adminName && snap.exists() && snap.data().role !== 'admin'){
+    try{
+      await updateDoc(ref,{
+        role:'admin',
+        name:snap.data().name || adminName,
+        email:user.email || snap.data().email || ''
+      });
+    }catch(e){
+      console.warn('Admin designado aguardando regras atualizadas do Firestore.',e);
+    }
   }
   const fresh = await getDoc(ref);
   const profile = fresh.exists() ? {uid:user.uid, ...fresh.data()} : {uid:user.uid, role:'member'};
