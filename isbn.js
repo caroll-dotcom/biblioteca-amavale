@@ -7,6 +7,8 @@ import {
   setDoc,
   collection,
   getDocs,
+  query,
+  where,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
@@ -27,6 +29,8 @@ let scannerControls = null;
 let scanning = false;
 let currentISBN = '';
 let currentMetadata = null;
+let duplicateISBNConfirmed = false;
+let duplicateCopies = [];
 
 const scannerStyle = document.createElement('style');
 scannerStyle.textContent = `
@@ -213,15 +217,29 @@ async function fetchGoogleBooks(isbn){
   }catch(e){ return null; }
 }
 
+async function copiesForISBN(isbn){
+  const snap=await getDocs(query(collection(db,'copies'),where('isbn','==',isbn)));
+  return snap.docs.map(d=>({id:d.id,...d.data()}));
+}
+
 async function lookupISBN(isbn){
   currentISBN=isbn;
+  duplicateISBNConfirmed=false;
+  duplicateCopies=[];
   const result=$('isbn-result');
   result.innerHTML='<div class="panel isbn-loading">ISBN lido: <b>'+escapeHtml(isbn)+'</b><br>Buscando os dados do livro…</div>';
   try{
     const existing=await getDoc(doc(db,'books',isbn));
+    const existingCopies=await copiesForISBN(isbn);
+    if(existing.exists() && existingCopies.length){
+      duplicateCopies=existingCopies;
+      currentMetadata={isbn,...existing.data(),source:'Acervo Amavale'};
+      renderMetadataForm(currentMetadata,true,false,existingCopies);
+      return;
+    }
     if(existing.exists()){
       currentMetadata={isbn,...existing.data(),source:'Acervo Amavale'};
-      renderMetadataForm(currentMetadata,true);
+      renderMetadataForm(currentMetadata,false,false);
       return;
     }
     let metadata=null;
@@ -239,13 +257,13 @@ async function lookupISBN(isbn){
   }
 }
 
-function renderMetadataForm(data,duplicate=false,notFound=false){
+function renderMetadataForm(data,duplicate=false,notFound=false,existingCopies=[]){
   const result=$('isbn-result');
   const cover=data.cover ? `<img class="isbn-cover" src="${escapeHtml(data.cover)}" alt="Capa do livro">` : '';
   result.innerHTML=`<div class="panel">
     <div class="isbn-found ${cover?'':'no-cover'}">${cover}<div>
-      <b>${duplicate ? '✓ Este título já existe no acervo' : notFound ? 'ISBN lido, mas os dados não foram encontrados' : '✓ Livro encontrado automaticamente'}</b>
-      <div class="isbn-hint">${duplicate ? 'Você pode cadastrar outro exemplar físico usando os mesmos dados.' : notFound ? 'Preencha os dados abaixo para continuar.' : 'Confira os dados antes de salvar. Fonte: '+escapeHtml(data.source||'consulta ISBN')+'.'}</div>
+      <b>${duplicate ? '⚠️ Este ISBN já está cadastrado' : notFound ? 'ISBN lido, mas os dados não foram encontrados' : '✓ Livro encontrado automaticamente'}</b>
+      <div class="isbn-hint">${duplicate ? 'O sistema encontrou '+existingCopies.length+' exemplar'+(existingCopies.length===1?'':'es')+' deste mesmo ISBN no acervo. Não cadastre novamente se for o mesmo exemplar físico.' : notFound ? 'Preencha os dados abaixo para continuar.' : 'Confira os dados antes de salvar. Fonte: '+escapeHtml(data.source||'consulta ISBN')+'.'}</div>
       <div class="isbn-code">ISBN ${escapeHtml(data.isbn)}</div>
     </div></div>
     <span class="label">Título</span><input class="field" id="isbn-title" value="${escapeHtml(data.title||'')}">
@@ -257,8 +275,9 @@ function renderMetadataForm(data,duplicate=false,notFound=false){
     <select class="field" id="isbn-category"><option value="">Selecione</option><option>Literatura brasileira</option><option>Literatura estrangeira</option><option>Contos e crônicas</option><option>Poesia</option><option>História do Brasil</option><option>História geral</option><option>Sociedade</option><option>Natureza e meio ambiente</option><option>Arte</option><option>Tecnologia</option><option>Infantil</option><option>Juvenil</option><option>Outros</option></select>
     <span class="label">Prateleira</span>
     <select class="field" id="isbn-shelf"><option value="">Selecione</option><option>A1</option><option>A2</option><option>A3</option><option>A4</option><option>B1</option><option>B2</option><option>C1</option><option>C2</option><option>D1</option><option>D2</option></select>
+    ${duplicate ? `<div class="auth-status show error" style="margin-bottom:10px"><b>Possível duplicidade.</b><br>Exemplar(es) já cadastrado(s): ${existingCopies.map(x=>escapeHtml(x.code||x.id)).join(', ')}</div>` : ''}
     <div id="isbn-save-status"></div>
-    <button class="btn green" onclick="saveScannedBook()">${duplicate ? 'CADASTRAR OUTRO EXEMPLAR' : 'CADASTRAR EXEMPLAR'}</button>
+    ${duplicate ? `<button class="btn green" onclick="confirmDuplicateISBNCopy()">Cadastrar outro exemplar físico mesmo assim</button>` : `<button class="btn green" onclick="saveScannedBook()">CADASTRAR EXEMPLAR</button>`}
     <button class="btn secondary" onclick="startISBNScanner()">Ler outro ISBN</button>
   </div>`;
 }
@@ -273,6 +292,15 @@ async function nextCopyCode(){
   });
   return `AMA-${String(max+1).padStart(5,'0')}`;
 }
+
+window.confirmDuplicateISBNCopy = function(){
+  if(!currentISBN) return;
+  const codes=duplicateCopies.map(x=>x.code||x.id).join(', ');
+  const ok=confirm('Este ISBN já está cadastrado no acervo'+(codes?' ('+codes+')':'')+'.\n\nSó continue se este for realmente outro exemplar físico do mesmo livro. Deseja cadastrar mesmo assim?');
+  if(!ok) return;
+  duplicateISBNConfirmed=true;
+  window.saveScannedBook();
+};
 
 window.saveScannedBook = async function(){
   const status=$('isbn-save-status');
@@ -290,6 +318,12 @@ window.saveScannedBook = async function(){
   const shelf=$('isbn-shelf')?.value;
   if(!title || !author || !category || !shelf){ show('Confira título e autor e selecione categoria e prateleira.','error'); return; }
   try{
+    const sameISBN=await copiesForISBN(currentISBN);
+    if(sameISBN.length && !duplicateISBNConfirmed){
+      duplicateCopies=sameISBN;
+      show('Este ISBN já está cadastrado no acervo. Use a confirmação de outro exemplar físico somente se realmente houver uma segunda cópia do livro.','error');
+      return;
+    }
     show('Salvando no acervo…','ok');
     const code=await nextCopyCode();
     const year=(publishDate.match(/\b(18|19|20)\d{2}\b/)||[])[0] || '';
@@ -304,6 +338,8 @@ window.saveScannedBook = async function(){
       authorCode:authorCode(author),status:'available',
       createdBy:auth.currentUser.uid,createdAt:serverTimestamp()
     });
+    duplicateISBNConfirmed=false;
+    duplicateCopies=[];
     $('isbn-result').innerHTML=`<div class="panel success"><div class="check">✓</div><h3>Livro cadastrado no Firestore</h3><p><b>${escapeHtml(title)}</b><br>${escapeHtml(author)}</p><div class="label-preview"><b>BIBLIOTECA AMAVALE</b><br><br><b style="font-size:20px">${escapeHtml(code)}</b><br>${escapeHtml(shelf)} · ${escapeHtml(authorCode(author))}</div><div class="notice">ISBN ${escapeHtml(currentISBN)}<br>Status: disponível</div><button class="btn primary" onclick="startISBNScanner()">Cadastrar próximo livro</button><button class="btn secondary" onclick="go('volunteer-home')">Voltar à Área do Voluntário</button></div>`;
   }catch(error){
     console.error(error);
