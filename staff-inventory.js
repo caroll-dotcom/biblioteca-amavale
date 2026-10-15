@@ -1,6 +1,6 @@
 import { getApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
-import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+import { getFirestore, collection, getDocs, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const auth=getAuth(getApp());
 const db=getFirestore(getApp());
@@ -121,9 +121,93 @@ async function renderStaffLabels(){
   }
 }
 
+
+function authorCode(name=''){
+  const parts=String(name||'').trim().split(/\s+/).filter(Boolean);
+  const last=parts[parts.length-1]||'AUT';
+  return last.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z]/g,'').slice(0,3).toUpperCase().padEnd(3,'X');
+}
+async function nextManualCode(){
+  const copies=await loadCopies();
+  let max=0;
+  copies.forEach(c=>{
+    const m=String(c.code||c.id||'').match(/^AMA-(\d+)$/);
+    if(m) max=Math.max(max,Number(m[1]));
+  });
+  return 'AMA-'+String(max+1).padStart(5,'0');
+}
+function renderManualBook(){
+  const section=document.getElementById('manual-book');
+  if(!section || !auth.currentUser) return;
+  section.innerHTML=`
+    <button class="back" onclick="go('volunteer-home')">← Voltar</button>
+    <h2 class="title">Cadastro manual</h2>
+    <div class="panel">
+      <p class="mini">Use esta opção para livros antigos ou sem ISBN. O exemplar será salvo no Firestore e aparecerá para todos os voluntários e administradores.</p>
+      <span class="label">Título</span><input class="field" id="manual-title">
+      <span class="label">Autor</span><input class="field" id="manual-author">
+      <span class="label">Editora</span><input class="field" id="manual-publisher">
+      <span class="label">Ano</span><input class="field" id="manual-year" inputmode="numeric">
+      <span class="label">ISBN, se houver</span><input class="field" id="manual-isbn" inputmode="numeric">
+      <span class="label">Categoria</span>
+      <select class="field" id="manual-category">
+        <option value="">Selecione</option>
+        <option>Literatura brasileira</option><option>Literatura estrangeira</option><option>Contos e crônicas</option><option>Poesia</option>
+        <option>História do Brasil</option><option>História geral</option><option>Sociedade</option>
+        <option>Natureza e meio ambiente</option><option>Arte</option><option>Infantil</option><option>Juvenil</option><option>Outros</option>
+      </select>
+      <span class="label">Prateleira</span>
+      <select class="field" id="manual-shelf">
+        <option value="">Selecione</option><option>A1</option><option>A2</option><option>A3</option><option>A4</option>
+        <option>B1</option><option>B2</option><option>C1</option><option>C2</option><option>D1</option><option>D2</option>
+      </select>
+      <div id="manual-status"></div>
+      <button class="btn green" onclick="saveManualBookFirestore()">Cadastrar exemplar</button>
+    </div>`;
+}
+window.saveManualBookFirestore=async function(){
+  const status=document.getElementById('manual-status');
+  const show=(text,type='ok')=>{if(status) status.innerHTML='<div class="auth-status show '+type+'">'+esc(text)+'</div>';};
+  if(!auth.currentUser){show('Entre novamente antes de salvar.','error');return;}
+  const title=document.getElementById('manual-title')?.value.trim()||'';
+  const author=document.getElementById('manual-author')?.value.trim()||'';
+  const publisher=document.getElementById('manual-publisher')?.value.trim()||'';
+  const year=document.getElementById('manual-year')?.value.trim()||'';
+  const isbn=(document.getElementById('manual-isbn')?.value||'').replace(/[^0-9Xx]/g,'').toUpperCase();
+  const category=document.getElementById('manual-category')?.value||'';
+  const shelf=document.getElementById('manual-shelf')?.value||'';
+  if(!title||!author||!category||!shelf){show('Preencha título e autor e selecione categoria e prateleira.','error');return;}
+  try{
+    show('Salvando no acervo…','ok');
+    const code=await nextManualCode();
+    const aCode=authorCode(author);
+    if(isbn){
+      await setDoc(doc(db,'books',isbn),{
+        isbn,title,author,publisher,publishDate:year,year,language:'',metadataSource:'manual',updatedAt:serverTimestamp()
+      },{merge:true});
+    }
+    await setDoc(doc(db,'copies',code),{
+      code,isbn,title,author,category,shelf,authorCode:aCode,status:'available',
+      createdBy:auth.currentUser.uid,createdAt:serverTimestamp()
+    });
+    section=document.getElementById('manual-book');
+    section.innerHTML=`<button class="back" onclick="go('volunteer-home')">← Voltar</button>
+      <h2 class="title">Cadastro manual</h2>
+      <div class="panel success"><div class="check">✓</div><h3>Livro cadastrado</h3>
+      <p><b>${esc(title)}</b><br>${esc(author)}</p>
+      <div class="label-preview"><b>BIBLIOTECA AMAVALE</b><br><br><b style="font-size:20px">${esc(code)}</b><br>${esc(shelf)} · ${esc(aCode)}</div>
+      <button class="btn green" onclick="go('manual-book')">Cadastrar outro livro</button>
+      <button class="btn secondary" onclick="go('today-books')">Ver livros cadastrados</button></div>`;
+  }catch(error){
+    console.error('Erro no cadastro manual',error);
+    show('Não foi possível salvar este livro no banco de dados.','error');
+  }
+};
+
 window.go=function(id){
   previousGo(id);
   if(id==='volunteer-home') setTimeout(patchVolunteerButton,20);
+  if(id==='manual-book') setTimeout(renderManualBook,30);
   if(id==='today-books') setTimeout(renderStaffBooks,30);
   if(id==='labels') setTimeout(renderStaffLabels,30);
 };
