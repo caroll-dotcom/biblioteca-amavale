@@ -1,6 +1,6 @@
 import { getApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
-import { getFirestore, collection, getDocs, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+import { getFirestore, collection, getDocs, doc, getDoc, setDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const auth=getAuth(getApp());
 const db=getFirestore(getApp());
@@ -29,6 +29,13 @@ function fmtDateTime(d){
 }
 function statusLabel(s){
   return ({available:'Disponível',borrowed:'Emprestado',reserved:'Reservado',damaged:'Em análise'})[s] || (s || 'Disponível');
+}
+async function currentRole(){
+  if(!auth.currentUser) return null;
+  try{
+    const snap=await getDoc(doc(db,'users',auth.currentUser.uid));
+    return snap.exists() ? (snap.data().role || 'member') : 'member';
+  }catch(e){ return null; }
 }
 async function loadCopies(){
   const snap=await getDocs(collection(db,'copies'));
@@ -59,6 +66,8 @@ async function renderStaffBooks(){
   const content=document.getElementById('staff-books-content');
   try{
     const copies=await loadCopies();
+    const role=await currentRole();
+    const isAdmin=role==='admin';
     const today=new Date();
     const todayCount=copies.filter(c=>sameLocalDay(toDate(c.createdAt),today)).length;
     const uniqueTitles=new Set(copies.map(c=>c.isbn || (String(c.title||'')+'|'+String(c.author||'')))).size;
@@ -83,7 +92,10 @@ async function renderStaffBooks(){
           <small>${c.shelf ? '📍 '+esc(c.shelf)+' · ' : ''}${esc(statusLabel(c.status))}</small>
           <small>${esc(fmtDateTime(created))}</small>
         </div>
-        <span class="tag">${esc(c.authorCode||'')}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          <span class="tag">${esc(c.authorCode||'')}</span>
+          ${isAdmin ? '<button class="btn secondary" style="width:auto;padding:8px 10px;margin:0;font-size:11px" onclick="deleteRegisteredCopy(\''+esc(c.code||c.id)+'\')">Excluir cadastro</button>' : ''}
+        </div>
       </div>`;
     }).join('')+'</div>';
   }catch(error){
@@ -91,6 +103,54 @@ async function renderStaffBooks(){
     content.innerHTML='<div class="auth-status show error">Não foi possível carregar os livros do banco de dados agora.</div>';
   }
 }
+
+window.deleteRegisteredCopy=async function(code){
+  if(!auth.currentUser) return;
+  try{
+    const role=await currentRole();
+    if(role!=='admin'){
+      alert('Somente um administrador pode excluir um livro do acervo.');
+      return;
+    }
+    const ref=doc(db,'copies',code);
+    const snap=await getDoc(ref);
+    if(!snap.exists()){
+      alert('Este exemplar já não existe no acervo.');
+      await renderStaffBooks();
+      return;
+    }
+    const copy={id:snap.id,...snap.data()};
+    if(copy.status==='borrowed' || copy.activeLoanId){
+      alert('Este exemplar está emprestado. Faça a devolução antes de excluir o cadastro.');
+      return;
+    }
+    if(copy.status==='reserved' || copy.reservedFor || copy.reservedWaitlistId){
+      alert('Este exemplar está reservado ou possui fila ativa. Resolva a reserva antes de excluir o cadastro.');
+      return;
+    }
+    const label=(copy.title||'Livro')+' ('+(copy.code||copy.id)+')';
+    const ok=confirm('Excluir definitivamente o cadastro de '+label+'?\n\nUse esta opção apenas para cadastro incorreto ou duplicado. Esta ação não pode ser desfeita.');
+    if(!ok) return;
+
+    await deleteDoc(ref);
+
+    if(copy.isbn){
+      const remaining=await getDocs(query(collection(db,'copies'),where('isbn','==',copy.isbn)));
+      if(remaining.empty){
+        try{ await deleteDoc(doc(db,'books',copy.isbn)); }catch(e){ console.warn('Metadados do título foram mantidos:',e); }
+      }
+    }
+
+    alert('Cadastro excluído do acervo.');
+    await renderStaffBooks();
+  }catch(error){
+    console.error('Erro ao excluir exemplar',error);
+    const msg=String(error?.code||'').includes('permission-denied')
+      ? 'O banco bloqueou a exclusão. Verifique se sua conta está como administradora e se as regras do Firestore estão atualizadas.'
+      : 'Não foi possível excluir este cadastro agora.';
+    alert(msg);
+  }
+};
 
 async function renderStaffLabels(){
   const section=document.getElementById('labels');
