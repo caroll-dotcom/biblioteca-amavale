@@ -254,7 +254,7 @@ function renderMetadataForm(data,duplicate=false,notFound=false){
     <span class="label">Ano / data da edição</span><input class="field" id="isbn-year" value="${escapeHtml(data.publishDate||data.year||'')}">
     <span class="label">Idioma</span><input class="field" id="isbn-language" value="${escapeHtml(data.language||'')}">
     <span class="label">Categoria</span>
-    <select class="field" id="isbn-category"><option value="">Selecione</option><option>Literatura brasileira</option><option>Literatura estrangeira</option><option>Contos e crônicas</option><option>Poesia</option><option>História do Brasil</option><option>História geral</option><option>Sociedade</option><option>Natureza e meio ambiente</option><option>Arte</option><option>Infantil</option><option>Juvenil</option><option>Outros</option></select>
+    <select class="field" id="isbn-category"><option value="">Selecione</option><option>Literatura brasileira</option><option>Literatura estrangeira</option><option>Contos e crônicas</option><option>Poesia</option><option>História do Brasil</option><option>História geral</option><option>Sociedade</option><option>Natureza e meio ambiente</option><option>Arte</option><option>Tecnologia</option><option>Infantil</option><option>Juvenil</option><option>Outros</option></select>
     <span class="label">Prateleira</span>
     <select class="field" id="isbn-shelf"><option value="">Selecione</option><option>A1</option><option>A2</option><option>A3</option><option>A4</option><option>B1</option><option>B2</option><option>C1</option><option>C2</option><option>D1</option><option>D2</option></select>
     <div id="isbn-save-status"></div>
