@@ -106,7 +106,12 @@ async function renderRealCatalog(){
   list.innerHTML='<div class="panel">Carregando catálogo…</div>';
   try{
     const copies=await getDocs(collection(db,'copies'));
-    const mine=await ownEntries();
+    let mine=[];
+    try{
+      mine=await ownEntries();
+    }catch(waitlistError){
+      console.warn('Fila de espera indisponível; exibindo o acervo mesmo assim.',waitlistError);
+    }
     const mineByKey=new Map(mine.filter(function(x){return ['waiting','ready'].includes(x.status);}).map(function(x){return [x.queueKey,x];}));
     const groups=new Map();
     copies.forEach(function(d){
@@ -119,8 +124,13 @@ async function renderRealCatalog(){
     const rows=Array.from(groups.values()).filter(function(g){
       return normalizeSearch([g.title,g.author,g.category,g.shelf,g.key].join(' ')).includes(term);
     }).sort(function(a,b){ return String(a.title||'').localeCompare(String(b.title||''),'pt-BR'); });
-    if(!rows.length){list.innerHTML='<div class="panel">Nenhum livro encontrado para esta busca.</div>';return;}
-    const html=[];
+    if(!rows.length){
+      list.innerHTML=copies.empty
+        ? '<div class="panel"><b>Acervo ainda sem exemplares cadastrados.</b><p class="mini">Assim que os voluntários cadastrarem os livros, eles aparecerão aqui automaticamente.</p></div>'
+        : '<div class="panel">Nenhum livro encontrado para esta busca.</div>';
+      return;
+    }
+    const html=[`<div class="panel"><b>Acervo geral</b><p class="mini">${rows.length} ${rows.length===1?'título encontrado':'títulos encontrados'}${term?' para esta busca':' no catálogo'}. Pesquise por título, autor ou assunto.</p></div>`];
     for(const g of rows){
       const available=g.copies.filter(function(c){return (c.status||'available')==='available';}).length;
       const reservedMine=g.copies.find(function(c){return c.status==='reserved'&&c.reservedFor===auth.currentUser.uid;});
@@ -133,7 +143,8 @@ async function renderRealCatalog(){
         tag='<span class="tag">Reservado para você</span>';
         action='<button class="btn green" onclick="go(\'borrow\');setTimeout(function(){memberLoadCopyForMode(\'borrow\',\''+esc(reservedMine.code||reservedMine.id)+'\');},0)">Retirar reserva</button>';
       }else if(own&&own.status==='waiting'){
-        const wait=await waitingEntries(g.key);
+        let wait=[];
+        try{ wait=await waitingEntries(g.key); }catch(e){ console.warn('Não foi possível consultar a posição na fila.',e); }
         const pos=wait.findIndex(function(x){return x.memberId===auth.currentUser.uid;})+1;
         tag='<span class="tag">Na fila</span>';
         action='<div class="queue-position">Posição '+(pos>0?pos:'—')+'</div><button class="btn secondary" onclick="cancelWaitlist(\''+esc(g.key)+'\')">Sair da fila</button>';
