@@ -241,16 +241,16 @@ async function fetchLibraryOfCongress(isbn){
     const createdPublished=Array.isArray(item.created_published)
       ? (item.created_published[0] || '')
       : (item.created_published || '');
-    const publisherMatch=String(createdPublished).match(/:\\s*([^,;]+?)(?:,\\s*\\[?(?:18|19|20)\\d{2}|$)/);
+    const publisherMatch=String(createdPublished).match(/:\s*([^,;]+?)(?:,\s*\[?(?:18|19|20)\d{2}|$)/);
     const publisher=publisherMatch ? publisherMatch[1].trim() : '';
 
     const rawDate=item.date_issued || row.date || item.date || '';
-    const year=(String(rawDate || createdPublished).match(/\\b(18|19|20)\\d{2}\\b/)||[])[0] || '';
+    const year=(String(rawDate || createdPublished).match(/\b(18|19|20)\d{2}\b/)||[])[0] || '';
 
     let lang=Array.isArray(row.language) ? (row.language[0] || '') : (row.language || item.language || '');
     const langKey=String(lang).toLowerCase();
     lang=({
-      portuguese:'Português',portuguese:'Português',english:'Inglês',
+      portuguese:'Português',english:'Inglês',
       spanish:'Espanhol',french:'Francês',italian:'Italiano',german:'Alemão'
     })[langKey] || lang || '';
 
