@@ -218,57 +218,194 @@ async function fetchGoogleBooks(isbn){
 }
 
 
+
+async function fetchWithTimeout(url,options={},timeoutMs=5000){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  try{
+    return await fetch(url,{...options,signal:controller.signal});
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+function languageLabel(value=''){
+  const code=String(value||'').trim().toLowerCase();
+  return ({
+    por:'Português',pt:'Português',portuguese:'Português',
+    eng:'Inglês',en:'Inglês',english:'Inglês',
+    spa:'Espanhol',es:'Espanhol',spanish:'Espanhol',
+    fre:'Francês',fra:'Francês',fr:'Francês',french:'Francês',
+    ita:'Italiano',it:'Italiano',italian:'Italiano',
+    ger:'Alemão',deu:'Alemão',de:'Alemão',german:'Alemão'
+  })[code] || value || '';
+}
+
+function firstXmlText(root,localName){
+  const nodes=root && root.getElementsByTagNameNS ? root.getElementsByTagNameNS('*',localName) : [];
+  return nodes && nodes[0] && nodes[0].textContent ? nodes[0].textContent.trim() : '';
+}
+function allXmlText(root,localName){
+  const nodes=root && root.getElementsByTagNameNS ? Array.from(root.getElementsByTagNameNS('*',localName)) : [];
+  return nodes.map(function(n){return n.textContent ? n.textContent.trim() : '';}).filter(Boolean);
+}
+function parseDublinCoreXML(text,isbn,source){
+  try{
+    const xml=new DOMParser().parseFromString(text,'application/xml');
+    if(xml.getElementsByTagName('parsererror').length) return null;
+    const title=firstXmlText(xml,'title');
+    if(!title) return null;
+    const creators=allXmlText(xml,'creator');
+    const publisher=firstXmlText(xml,'publisher');
+    const rawDate=firstXmlText(xml,'date');
+    const language=languageLabel(firstXmlText(xml,'language'));
+    const year=(String(rawDate).match(/\b(18|19|20)\d{2}\b/)||[])[0] || '';
+    return {isbn:isbn,title:title,author:creators.join(', '),publisher:publisher,publishDate:rawDate||year,year:year,language:language,cover:'',source:source};
+  }catch(e){
+    return null;
+  }
+}
+function marcFieldValues(xml,tag,code){
+  const fields=Array.from((xml && xml.getElementsByTagNameNS) ? xml.getElementsByTagNameNS('*','datafield') : []);
+  const out=[];
+  for(const field of fields){
+    if(field.getAttribute('tag')!==tag) continue;
+    const subs=Array.from(field.getElementsByTagNameNS('*','subfield'));
+    for(const sub of subs){
+      if(sub.getAttribute('code')===code){
+        const v=(sub.textContent||'').trim().replace(/\s*[\/,:;]\s*$/,'');
+        if(v) out.push(v);
+      }
+    }
+  }
+  return out;
+}
+function parseMarcXML(text,isbn,source,fallback={}){
+  try{
+    const xml=new DOMParser().parseFromString(text,'application/xml');
+    if(xml.getElementsByTagName('parsererror').length) return null;
+    const title=(marcFieldValues(xml,'245','a')[0] || fallback.title || '').trim();
+    if(!title) return null;
+    const subtitle=marcFieldValues(xml,'245','b')[0] || '';
+    const authors=[].concat(marcFieldValues(xml,'100','a'),marcFieldValues(xml,'110','a'),marcFieldValues(xml,'700','a')).filter(Boolean);
+    const publisher=marcFieldValues(xml,'264','b')[0] || marcFieldValues(xml,'260','b')[0] || fallback.publisher || '';
+    const rawDate=marcFieldValues(xml,'264','c')[0] || marcFieldValues(xml,'260','c')[0] || fallback.publishDate || '';
+    const lang=marcFieldValues(xml,'041','a')[0] || fallback.language || '';
+    const year=(String(rawDate).match(/\b(18|19|20)\d{2}\b/)||[])[0] || '';
+    return {isbn:isbn,title:subtitle ? title+' '+subtitle : title,author:authors.join(', ')||fallback.author||'',publisher:publisher,publishDate:rawDate||year,year:year,language:languageLabel(lang),cover:'',source:source};
+  }catch(e){
+    return null;
+  }
+}
+
 async function fetchLibraryOfCongress(isbn){
   try{
-    const res=await fetch(`https://www.loc.gov/books/?q=${encodeURIComponent(isbn)}&fo=json&c=10`);
+    const res=await fetchWithTimeout('https://www.loc.gov/books/?q='+encodeURIComponent(isbn)+'&fo=json&c=10');
     if(!res.ok) return null;
     const data=await res.json();
     const rows=Array.isArray(data.results) ? data.results : [];
-    const row=rows.find(r => (r?.title || r?.item?.title));
+    const row=rows.find(function(r){return (r && (r.title || (r.item && r.item.title)));});
     if(!row) return null;
-
     const item=row.item || {};
     const title=row.title || item.title || '';
-
     let contributors=row.contributor || item.contributor_names || item.contributors || [];
     if(!Array.isArray(contributors)) contributors=[contributors];
-    const author=contributors.map(x=>{
+    const author=contributors.map(function(x){
       if(typeof x==='string') return x;
       if(x && typeof x==='object') return Object.keys(x)[0] || x.name || '';
       return '';
     }).filter(Boolean).join(', ');
-
-    const createdPublished=Array.isArray(item.created_published)
-      ? (item.created_published[0] || '')
-      : (item.created_published || '');
+    const createdPublished=Array.isArray(item.created_published) ? (item.created_published[0] || '') : (item.created_published || '');
     const publisherMatch=String(createdPublished).match(/:\s*([^,;]+?)(?:,\s*\[?(?:18|19|20)\d{2}|$)/);
     const publisher=publisherMatch ? publisherMatch[1].trim() : '';
-
     const rawDate=item.date_issued || row.date || item.date || '';
     const year=(String(rawDate || createdPublished).match(/\b(18|19|20)\d{2}\b/)||[])[0] || '';
-
     let lang=Array.isArray(row.language) ? (row.language[0] || '') : (row.language || item.language || '');
-    const langKey=String(lang).toLowerCase();
-    lang=({
-      portuguese:'Português',english:'Inglês',
-      spanish:'Espanhol',french:'Francês',italian:'Italiano',german:'Alemão'
-    })[langKey] || lang || '';
-
-    return {
-      isbn,
-      title,
-      author,
-      publisher,
-      publishDate:year || String(rawDate || ''),
-      year,
-      language:lang,
-      cover:'',
-      source:'Library of Congress'
-    };
+    return {isbn:isbn,title:title,author:author,publisher:publisher,publishDate:year||String(rawDate||''),year:year,language:languageLabel(lang),cover:'',source:'Library of Congress'};
   }catch(e){
     console.warn('Consulta à Library of Congress falhou.',e);
     return null;
   }
+}
+
+async function fetchBnF(isbn){
+  try{
+    const query='bib.fuzzyISBN adj "'+isbn+'"';
+    const url='https://catalogue.bnf.fr/api/SRU?version=1.2&operation=searchRetrieve&query='+encodeURIComponent(query)+'&recordSchema=dublincore&maximumRecords=5';
+    const res=await fetchWithTimeout(url);
+    if(!res.ok) return null;
+    const metadata=parseDublinCoreXML(await res.text(),isbn,'Bibliothèque nationale de France');
+    if(metadata && metadata.title){
+      metadata.cover='https://openapi.bnf.fr/couverture/image/image/recupererImage?ISBN='+encodeURIComponent(isbn)+'&couverture=1';
+    }
+    return metadata;
+  }catch(e){
+    console.warn('Consulta à BnF falhou.',e);
+    return null;
+  }
+}
+
+async function fetchHathiTrust(isbn){
+  try{
+    const url='https://catalog.hathitrust.org/api/volumes/full/isbn/'+encodeURIComponent(isbn)+'.json';
+    const res=await fetchWithTimeout(url);
+    if(!res.ok) return null;
+    const data=await res.json();
+    const records=data && data.records && typeof data.records==='object' ? Object.values(data.records) : [];
+    const record=records[0];
+    if(!record) return null;
+    const fallback={
+      title:Array.isArray(record.titles) ? (record.titles[0]||'') : '',
+      publishDate:Array.isArray(record.publishDates) ? (record.publishDates[0]||'') : ''
+    };
+    if(record['marc-xml']){
+      const parsed=parseMarcXML(record['marc-xml'],isbn,'HathiTrust',fallback);
+      if(parsed && parsed.title) return parsed;
+    }
+    if(!fallback.title) return null;
+    const year=(String(fallback.publishDate).match(/\b(18|19|20)\d{2}\b/)||[])[0] || '';
+    return {isbn:isbn,title:fallback.title,author:'',publisher:'',publishDate:fallback.publishDate,year:year,language:'',cover:'',source:'HathiTrust'};
+  }catch(e){
+    console.warn('Consulta ao HathiTrust falhou.',e);
+    return null;
+  }
+}
+
+async function fetchBNE(isbn){
+  try{
+    const query='alma.isbn="'+isbn+'"';
+    const url='https://catalogo.bne.es/view/sru/34BNE_INST?operation=searchRetrieve&version=1.2&query='+encodeURIComponent(query)+'&recordSchema=marcxml&startRecord=1&maximumRecords=5';
+    const res=await fetchWithTimeout(url);
+    if(!res.ok) return null;
+    return parseMarcXML(await res.text(),isbn,'Biblioteca Nacional de España');
+  }catch(e){
+    console.warn('Consulta à Biblioteca Nacional de España falhou.',e);
+    return null;
+  }
+}
+
+async function fetchDNB(isbn){
+  try{
+    const query='isbn='+isbn;
+    const url='https://services.dnb.de/sru/dnb?version=1.1&operation=searchRetrieve&recordSchema=MARC21-xml&maximumRecords=5&query='+encodeURIComponent(query);
+    const res=await fetchWithTimeout(url);
+    if(!res.ok) return null;
+    return parseMarcXML(await res.text(),isbn,'Deutsche Nationalbibliothek');
+  }catch(e){
+    console.warn('Consulta à Deutsche Nationalbibliothek falhou.',e);
+    return null;
+  }
+}
+
+async function fetchInternationalLibraries(isbn){
+  const results=await Promise.all([
+    fetchLibraryOfCongress(isbn),
+    fetchBnF(isbn),
+    fetchHathiTrust(isbn),
+    fetchBNE(isbn),
+    fetchDNB(isbn)
+  ]);
+  return results.find(function(x){return x && x.title;}) || null;
 }
 
 async function copiesForISBN(isbn){
@@ -299,7 +436,7 @@ async function lookupISBN(isbn){
     let metadata=null;
     try{ metadata=await fetchOpenLibrary(isbn); }catch(e){}
     if(!metadata?.title){ metadata=await fetchGoogleBooks(isbn); }
-    if(!metadata?.title){ metadata=await fetchLibraryOfCongress(isbn); }
+    if(!metadata?.title){ metadata=await fetchInternationalLibraries(isbn); }
     if(!metadata?.title){
       currentMetadata={isbn,title:'',author:'',publisher:'',publishDate:'',year:'',language:'',cover:'',source:'Cadastro manual'};
       renderMetadataForm(currentMetadata,false,true);
