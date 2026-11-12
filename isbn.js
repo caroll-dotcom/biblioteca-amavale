@@ -217,6 +217,60 @@ async function fetchGoogleBooks(isbn){
   }catch(e){ return null; }
 }
 
+
+async function fetchLibraryOfCongress(isbn){
+  try{
+    const res=await fetch(`https://www.loc.gov/books/?q=${encodeURIComponent(isbn)}&fo=json&c=10`);
+    if(!res.ok) return null;
+    const data=await res.json();
+    const rows=Array.isArray(data.results) ? data.results : [];
+    const row=rows.find(r => (r?.title || r?.item?.title));
+    if(!row) return null;
+
+    const item=row.item || {};
+    const title=row.title || item.title || '';
+
+    let contributors=row.contributor || item.contributor_names || item.contributors || [];
+    if(!Array.isArray(contributors)) contributors=[contributors];
+    const author=contributors.map(x=>{
+      if(typeof x==='string') return x;
+      if(x && typeof x==='object') return Object.keys(x)[0] || x.name || '';
+      return '';
+    }).filter(Boolean).join(', ');
+
+    const createdPublished=Array.isArray(item.created_published)
+      ? (item.created_published[0] || '')
+      : (item.created_published || '');
+    const publisherMatch=String(createdPublished).match(/:\\s*([^,;]+?)(?:,\\s*\\[?(?:18|19|20)\\d{2}|$)/);
+    const publisher=publisherMatch ? publisherMatch[1].trim() : '';
+
+    const rawDate=item.date_issued || row.date || item.date || '';
+    const year=(String(rawDate || createdPublished).match(/\\b(18|19|20)\\d{2}\\b/)||[])[0] || '';
+
+    let lang=Array.isArray(row.language) ? (row.language[0] || '') : (row.language || item.language || '');
+    const langKey=String(lang).toLowerCase();
+    lang=({
+      portuguese:'Português',portuguese:'Português',english:'Inglês',
+      spanish:'Espanhol',french:'Francês',italian:'Italiano',german:'Alemão'
+    })[langKey] || lang || '';
+
+    return {
+      isbn,
+      title,
+      author,
+      publisher,
+      publishDate:year || String(rawDate || ''),
+      year,
+      language:lang,
+      cover:'',
+      source:'Library of Congress'
+    };
+  }catch(e){
+    console.warn('Consulta à Library of Congress falhou.',e);
+    return null;
+  }
+}
+
 async function copiesForISBN(isbn){
   const snap=await getDocs(query(collection(db,'copies'),where('isbn','==',isbn)));
   return snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -245,6 +299,7 @@ async function lookupISBN(isbn){
     let metadata=null;
     try{ metadata=await fetchOpenLibrary(isbn); }catch(e){}
     if(!metadata?.title){ metadata=await fetchGoogleBooks(isbn); }
+    if(!metadata?.title){ metadata=await fetchLibraryOfCongress(isbn); }
     if(!metadata?.title){
       currentMetadata={isbn,title:'',author:'',publisher:'',publishDate:'',year:'',language:'',cover:'',source:'Cadastro manual'};
       renderMetadataForm(currentMetadata,false,true);
